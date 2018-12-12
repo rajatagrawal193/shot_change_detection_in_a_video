@@ -1,11 +1,10 @@
-
 from imutils import face_utils
 import numpy as np
 import imutils
 import cv2
 import os
 import sys
-
+import shutil
 
 def convert_to_frames(video_url):
     # To convert the input video to frames
@@ -85,7 +84,20 @@ if __name__ == '__main__':
     if len(sys.argv)< 2:
         print('USAGE...  SOMETHING')
     video_url= sys.argv[1]
-    # frames_url= convert_to_frames(video_url)
-    files= list_the_frames('frames')
+    frames_url='frames'
+    difference_images_url='difference_images'
+    shots_url='shots'
+    if os.path.exists(frames_url):
+        shutil.rmtree(frames_url)
+        os.mkdir(frames_url)
+    if os.path.exists(difference_images_url):
+        shutil.rmtree(difference_images_url)
+        os.mkdir(difference_images_url)
+    if os.path.exists(shots_url):
+        shutil.rmtree(shots_url)
+        os.mkdir(shots_url)
+   
+    frames_url= convert_to_frames(video_url)
+    files= list_the_frames(frames_url)
     detect_shot_change(files)
     
