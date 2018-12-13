@@ -5,79 +5,76 @@ import cv2
 import os
 import sys
 import shutil
+import timeit
+import time
 
 def convert_to_frames(video_url):
     # To convert the input video to frames
-    cmd='ffmpeg -i '+ video_url+' -r 20 '+frames_url+'/frame%3d.png'
+    cmd='ffmpeg -i '+ video_url+' -filter:v scale=480:-1 '+frames_url+'/frame%3d.png'
     os.system(cmd)
     return frames_url
 
 def list_the_frames(frames_url):
     #List all the frame images from the directory and store it in files and sort them.
     files = os.listdir(frames_url)
-    files.sort()
+    files= sorted(files, key=lambda x:int(x.split('.')[0][5:]))
+    # files.sort()
     print(files)
+
     return files
 
-def detect_shot_change(files, frames_url, difference_images_url, shots_url,stacked_matrix_url):
+def get_subtracted_matrix(image1, image2, rows, columns):
+    lLimit= 50 
+    rLimit= 50
+    subtracted_matrix= np.zeros((rows,columns), dtype = np.uint8)
+    subtracted_matrix= abs(image2-image1)
+    subtracted_matrix[subtracted_matrix>=rLimit]=255
+    subtracted_matrix[subtracted_matrix<=lLimit]=0
+    return subtracted_matrix
 
-    #define the width of the desired frames
-    width= 500
+def read_the_images(files, frames_url):
+    images=[]
+    files_length=len(files)    
+    for i in range(files_length):
+        print('processing image {} of {}'.format(i+1, files_length))  
 
-    #initialize a matrix 
-    stacked_matrix= np.zeros((len(files)-1, width), dtype = np.uint8)
-    # temp_list= np.zeros(len(files)-1)
-    # define the width of the final image
-    columns= width
-    sample= cv2.imread(frames_url+'/'+files[0], 0)
-    print(sample)
-    sample= imutils.resize(sample, width)
+        images.append(cv2.imread(frames_url+'/'+files[i], 0))
+    return images
     
-    # sample= imutils.resize(cv2.imread('frames/'+files[0], 0), width= 500)
+
+def detect_shot_change(files, frames_url, difference_images_url, shots_url,stacked_matrix_url):
+    
+    width= 480
+    stacked_matrix= np.zeros((len(files)-1, width), dtype = np.uint8)
+    columns= width
+    sample= imutils.resize(cv2.imread(frames_url+'/'+files[0], 0), width)
     rows= sample.shape[0]
+    images= read_the_images(files, frames_url)
 
-    # Read all the images from the files
-    for k in range (len(files)-1):
-        print('processing image {} of {}'.format(k, len(files)))
-        # Read the images from the files and resize it
-        image1 =cv2.imread(frames_url+'/'+files[k], 0)
-        image1 = imutils.resize(image1, width=500)
-        image2 =cv2.imread(frames_url+'/'+files[k+1], 0)
-        image2 = imutils.resize(image2, width=500)
-        
-        #initialize a subtracted matrix
-        subtracted_matrix= np.zeros((rows,columns), dtype = np.uint8)
-        lLimit= 5 
-        rLimit= 20
-        for i in range(rows):
-            for j in range(columns):
-                percenteageDiff= (abs(int(image2[i,j])-int(image1[i,j]))/255)*100
-                if percenteageDiff<lLimit:
-                    subtracted_matrix[i,j]=0
-                elif percenteageDiff>rLimit:
-                    subtracted_matrix[i,j]=255 
-                else:
-                 subtracted_matrix[i,j]= image2[i,j]- image1[i,j]
-
-        cv2.imwrite(difference_images_url+'/difference_image{}.png'.format(k), subtracted_matrix)
+    files_length=len(images)
+    
+    for k in range (files_length-1):
+        print('processing image {} of {}'.format(k+1, files_length), flush=True)
+        subtracted_matrix= get_subtracted_matrix(images[k], images[k+1], rows, columns)
+        # cv2.imwrite(difference_images_url+'/difference_image{}.png'.format(k), subtracted_matrix)
         stacked_matrix[k] = np.sum(subtracted_matrix, axis=0)/rows
         cv2.imwrite(stacked_matrix_url+'/stacked_matrix.png', stacked_matrix)
-
+    
     temp_list= np.sum(stacked_matrix, axis=1)/columns
-    print(np.max(temp_list))
-    print(temp_list)
-    print(np.sort(temp_list))
+    _max=int(np.max(temp_list))
 
-    for i in range(len(temp_list)-1):
-        diff=(abs(int(temp_list[i+1])- int(temp_list[i]))/255)*100
-        if diff>45: 
-            # print(i)
-            cv2.imread(files[i+1])
-            preShotChange =cv2.imread(frames_url+'/'+files[i+1], 1)
-            cv2.imwrite(shots_url+'/'+files[i+1], preShotChange)
+    for i in range(0, len(temp_list)-1):
+
+        diff=((abs(int(temp_list[i+1])- int(temp_list[i]))/_max))*100
+        if diff>70: 
+            postShotChange =cv2.imread(frames_url+'/'+files[i+1], 1)
+            cv2.imwrite(shots_url+'/'+files[i+1], postShotChange)
+            i=i+1
 
     cv2.imshow("output", stacked_matrix)
     cv2.waitKey(0)
+
+
 
 if __name__ == '__main__':
     if len(sys.argv)< 2:
